@@ -17,7 +17,6 @@ package io.confluent.connect.elasticsearch;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -94,16 +93,9 @@ public class ElasticsearchClient {
   private static final String RESOURCE_ALREADY_EXISTS_EXCEPTION =
       "resource_already_exists_exception";
   private static final String VERSION_CONFLICT_EXCEPTION = "version_conflict_engine_exception";
-  private static final Set<String> MALFORMED_DOC_ERRORS = new HashSet<>(
-      Arrays.asList(
-          "strict_dynamic_mapping_exception",
-          "mapper_parsing_exception",
-          "illegal_argument_exception",
-          "action_request_validation_exception"
-      )
-  );
   private static final String UNKNOWN_VERSION_TAG = "Unknown";
 
+  private final Set<String> malformedDocErrorTypes;
   private final boolean logSensitiveData;
   protected final AtomicInteger numBufferedRecords;
   private final AtomicReference<ConnectException> error;
@@ -134,6 +126,7 @@ public class ElasticsearchClient {
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
     this.logSensitiveData = config.shouldLogSensitiveData();
+    this.malformedDocErrorTypes = new HashSet<>(config.getMalformedDocErrorTypes());
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     RestClient client = RestClient
@@ -579,8 +572,9 @@ public class ElasticsearchClient {
                                    DocWriteRequest<?> request,
                                    long executionId) {
     if (response.isFailed()) {
-      for (String error : MALFORMED_DOC_ERRORS) {
-        if (response.getFailureMessage().contains(error)) {
+      String failureMessage = response.getFailureMessage();
+      for (String errorType : malformedDocErrorTypes) {
+        if (failureMessage.contains(errorType)) {
           boolean failed = handleMalformedDocResponse(response);
           if (!failed) {
             reportBadRecord(response, executionId);
@@ -588,7 +582,7 @@ public class ElasticsearchClient {
           return failed;
         }
       }
-      if (response.getFailureMessage().contains(VERSION_CONFLICT_EXCEPTION)) {
+      if (failureMessage.contains(VERSION_CONFLICT_EXCEPTION)) {
         // Now check if this version conflict is caused by external version number
         // which was set by us (set explicitly to the topic's offset), in which case
         // the version conflict is due to a repeated or out-of-order message offset

@@ -18,10 +18,7 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -240,11 +237,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final BehaviorOnNullValues BEHAVIOR_ON_NULL_VALUES_DEFAULT =
       BehaviorOnNullValues.FAIL;
 
+  public static final String MALFORMED_DOC_ERROR_TYPES_CONFIG = "malformed.document.error.types";
+  private static final String MALFORMED_DOC_ERROR_TYPES_DOC = "The comma-separated list of Elasticsearch error types which "
+    + "will be treated as malformed document rejections. Override this if your error type is missing "
+    + "or if you need more strict connector failure policy";
+  private static final String MALFORMED_DOC_ERROR_TYPES_DISPLAY = "Malformed document error types";
+  private static final List<String> MALFORMED_DOC_ERROR_TYPES_DEFAULT =
+      Arrays.asList(
+          "strict_dynamic_mapping_exception",
+          "mapper_parsing_exception",
+          "illegal_argument_exception",
+          "action_request_validation_exception",
+          "document_parsing_exception"
+      );
+
   public static final String BEHAVIOR_ON_MALFORMED_DOCS_CONFIG = "behavior.on.malformed.documents";
   private static final String BEHAVIOR_ON_MALFORMED_DOCS_DOC = "How to handle records that "
       + "Elasticsearch rejects due to some malformation of the document itself, such as an index"
       + " mapping conflict, a field name containing illegal characters, or a record with a missing"
-      + " id. Valid options are ignore', 'warn', and 'fail'.";
+      + " id. Valid options are 'ignore', 'warn', and 'fail'.\n"
+      + "Use ``" + MALFORMED_DOC_ERROR_TYPES_CONFIG + "`` to override the list of error types affected by this behavior";
   private static final String BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY =
       "Behavior on malformed documents";
   private static final BehaviorOnMalformedDoc BEHAVIOR_ON_MALFORMED_DOCS_DEFAULT =
@@ -698,6 +710,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY,
             new EnumRecommender<>(BehaviorOnMalformedDoc.class)
         ).define(
+            MALFORMED_DOC_ERROR_TYPES_CONFIG,
+            Type.LIST,
+            MALFORMED_DOC_ERROR_TYPES_DEFAULT,
+            Importance.LOW,
+            MALFORMED_DOC_ERROR_TYPES_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.LONG,
+            MALFORMED_DOC_ERROR_TYPES_DISPLAY
+        ).define(
             EXTERNAL_VERSION_HEADER_CONFIG,
             Type.STRING,
             EXTERNAL_VERSION_HEADER_DEFAULT,
@@ -910,6 +932,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return BehaviorOnMalformedDoc.valueOf(
         getString(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG).toUpperCase()
     );
+  }
+
+  public List<String> getMalformedDocErrorTypes() {
+    return getList(MALFORMED_DOC_ERROR_TYPES_CONFIG);
   }
 
   public BehaviorOnNullValues behaviorOnNullValues() {
